@@ -60,7 +60,7 @@ export class EDAAppStack extends cdk.Stack {
         maxBatchingWindow: cdk.Duration.seconds(5),
       }
     );
-    
+
     processImageFn.addEventSource(newImageEventSource);
 
     // Permissions
@@ -71,5 +71,47 @@ export class EDAAppStack extends cdk.Stack {
     new cdk.CfnOutput(this, "bucketName", {
       value: imagesBucket.bucketName,
     });
+
+    // Email queue
+    const mailerQ = new sqs.Queue(this, "mailer-q", {
+      receiveMessageWaitTime: cdk.Duration.seconds(6),
+    });
+
+    // Email Lambda
+    const mailerFn = new lambdanode.NodejsFunction(this, "mailer", {
+      runtime: lambda.Runtime.NODEJS_22_X,
+      memorySize: 1024,
+      timeout: cdk.Duration.seconds(3),
+      entry: `${__dirname}/../lambdas/mailer.ts`,
+    });
+
+    // SNS --> email queue
+    newImageTopic.addSubscription(
+      new subs.SqsSubscription(mailerQ)
+    );
+
+    // Email queue --> email Lambda
+    const newImageMailEventSource = new events.SqsEventSource(
+      mailerQ,
+      {
+        batchSize: 5,
+        maxBatchingWindow: cdk.Duration.seconds(5),
+      }
+    );
+
+    mailerFn.addEventSource(newImageMailEventSource);
+
+    // Allow the Lambda to send emails
+    mailerFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          "ses:SendEmail",
+          "ses:SendRawEmail",
+          "ses:SendTemplatedEmail",
+        ],
+        resources: ["*"],
+      })
+    );
   }
 }
