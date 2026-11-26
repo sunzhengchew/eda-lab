@@ -1,8 +1,8 @@
 import { SQSHandler } from "aws-lambda";
 import {
-  S3Client,
   GetObjectCommand,
   GetObjectCommandInput,
+  S3Client,
 } from "@aws-sdk/client-s3";
 
 const s3 = new S3Client();
@@ -12,17 +12,20 @@ export const handler: SQSHandler = async (event) => {
 
   for (const record of event.Records) {
     const recordBody = JSON.parse(record.body);
+    const snsMessage = JSON.parse(recordBody.Message);
 
-    if (recordBody.Records) {
-      console.log("Record body ", JSON.stringify(recordBody));
+    console.log("Record body ", JSON.stringify(snsMessage));
 
-      for (const messageRecord of recordBody.Records) {
-        const s3e = messageRecord.s3;
+    if (snsMessage.Records) {
+      for (const s3Message of snsMessage.Records) {
+        const s3e = s3Message.s3;
         const srcBucket = s3e.bucket.name;
 
         const srcKey = decodeURIComponent(
           s3e.object.key.replace(/\+/g, " ")
         );
+
+        let theImage = null;
 
         try {
           const params: GetObjectCommandInput = {
@@ -30,11 +33,9 @@ export const handler: SQSHandler = async (event) => {
             Key: srcKey,
           };
 
-          const theImage = await s3.send(
-            new GetObjectCommand(params)
-          );
+          theImage = await s3.send(new GetObjectCommand(params));
 
-          // Image processing could be added here.
+          // Process the image here if required.
         } catch (error) {
           console.log(error);
         }

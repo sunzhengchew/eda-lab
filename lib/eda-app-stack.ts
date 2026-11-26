@@ -22,9 +22,12 @@ export class EDAAppStack extends cdk.Stack {
       publicReadAccess: false,
     });
 
-    // Integration infrastructure
-    const queue = new sqs.Queue(this, "img-uploaded-q", {
+    const imageProcessQueue = new sqs.Queue(this, "img-process-q", {
       receiveMessageWaitTime: cdk.Duration.seconds(6),
+    });
+
+    const newImageTopic = new sns.Topic(this, "NewImageTopic", {
+      displayName: "New Image topic",
     });
 
     // Lambda functions
@@ -39,18 +42,25 @@ export class EDAAppStack extends cdk.Stack {
       }
     );
 
-    // S3 --> SQS
+    // S3 --> SNS
     imagesBucket.addEventNotification(
       s3.EventType.OBJECT_CREATED,
-      new s3n.SqsDestination(queue)
+      new s3n.SnsDestination(newImageTopic)
     );
 
-    // SQS --> Lambda
-    const newImageEventSource = new events.SqsEventSource(queue, {
-      batchSize: 5,
-      maxBatchingWindow: cdk.Duration.seconds(5),
-    });
+    // SNS --> SQS
+    newImageTopic.addSubscription(
+      new subs.SqsSubscription(imageProcessQueue)
+    );
 
+    const newImageEventSource = new events.SqsEventSource(
+      imageProcessQueue,
+      {
+        batchSize: 5,
+        maxBatchingWindow: cdk.Duration.seconds(5),
+      }
+    );
+    
     processImageFn.addEventSource(newImageEventSource);
 
     // Permissions
