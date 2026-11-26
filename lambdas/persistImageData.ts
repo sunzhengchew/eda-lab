@@ -24,18 +24,30 @@ export const handler: SQSHandler = async (event) => {
           s3e.object.key.replace(/\+/g, " ")
         );
 
-        try {
-          await ddbDocClient.send(
-            new PutCommand({
-              TableName: process.env.TABLE_NAME,
-              Item: {
-                name: srcKey,
-              },
-            })
-          );
-        } catch (error) {
-          console.log(error);
+        const typeMatch = srcKey.match(/\.([^.]*)$/);
+
+        if (!typeMatch) {
+          throw new Error("Could not determine the image type.");
         }
+
+        const imageType = typeMatch[1].toLowerCase();
+
+        if (
+          imageType !== "jpeg" &&
+          imageType !== "jpg" &&
+          imageType !== "png"
+        ) {
+          throw new Error(`Unsupported image type: ${imageType}`);
+        }
+
+        await ddbDocClient.send(
+          new PutCommand({
+            TableName: process.env.TABLE_NAME,
+            Item: {
+              name: srcKey,
+            },
+          })
+        );
       }
     }
   }
@@ -46,18 +58,14 @@ function createDDbDocClient() {
     region: process.env.REGION,
   });
 
-  const marshallOptions = {
-    convertEmptyValues: true,
-    removeUndefinedValues: true,
-    convertClassInstanceToMap: true,
-  };
-
-  const unmarshallOptions = {
-    wrapNumbers: false,
-  };
-
   return DynamoDBDocumentClient.from(ddbClient, {
-    marshallOptions,
-    unmarshallOptions,
+    marshallOptions: {
+      convertEmptyValues: true,
+      removeUndefinedValues: true,
+      convertClassInstanceToMap: true,
+    },
+    unmarshallOptions: {
+      wrapNumbers: false,
+    },
   });
 }
